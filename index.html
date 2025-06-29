@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Настольный теннис</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        
+        body {
+            background: var(--tg-theme-bg-color, linear-gradient(135deg, #1e3c72, #2a5298));
+            color: var(--tg-theme-text-color, white);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: var(--tg-theme-bg-color, linear-gradient(135deg, #1e3c72, #2a5298));
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            z-index: 100;
+            background: var(--tg-theme-secondary-bg-color, rgba(0,0,0,0.8));
+            padding: 10px 15px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .score {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--tg-theme-text-color, white);
+        }
+        
+        .controls {
+            font-size: 12px;
+            text-align: center;
+            color: var(--tg-theme-hint-color, #aaa);
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 200;
+            background: var(--tg-theme-bg-color, rgba(0,0,0,0.95));
+            padding: 30px 20px;
+            border-radius: 16px;
+            backdrop-filter: blur(15px);
+            max-width: 320px;
+            width: 90%;
+        }
+        
+        #instructions h2 {
+            color: var(--tg-theme-text-color, white);
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+        
+        #instructions p {
+            color: var(--tg-theme-hint-color, #ccc);
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+        
+        #startButton {
+            background: var(--tg-theme-button-color, linear-gradient(45deg, #4CAF50, #45a049));
+            color: var(--tg-theme-button-text-color, white);
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+            width: 100%;
+            font-weight: bold;
+        }
+        
+        #startButton:active {
+            transform: scale(0.95);
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        #touchArea {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40%;
+            z-index: 50;
+            background: rgba(255,255,255,0.1);
+            border-top: 2px solid rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, rgba(255,255,255,0.7));
+        }
+        
+        #gameOverModal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 300;
+            background: var(--tg-theme-bg-color, rgba(0,0,0,0.95));
+            padding: 30px 20px;
+            border-radius: 16px;
+            text-align: center;
+            max-width: 320px;
+            width: 90%;
+        }
+        
+        #shareButton {
+            background: var(--tg-theme-link-color, #2481cc);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            margin: 10px 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        #restartButton {
+            background: var(--tg-theme-button-color, #4CAF50);
+            color: var(--tg-theme-button-text-color, white);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            margin: 10px 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <div class="score">Вы: <span id="playerScore">0</span></div>
+            <div class="controls">Тапайте и двигайте<br>для удара</div>
+            <div class="score">ИИ: <span id="aiScore">0</span></div>
+        </div>
+        
+        <div id="instructions">
+            <h2>🏓 Пинг-понг 3D</h2>
+            <p>Перемещайте палец по экрану для управления ракеткой.</p>
+            <p>Тапайте для удара по мячу!</p>
+            <p>Первый до 5 очков побеждает.</p>
+            <button id="startButton">🚀 Начать игру</button>
+        </div>
+        
+        <div id="touchArea" class="hidden">
+            Область управления ракеткой
+        </div>
+        
+        <div id="gameOverModal" class="hidden">
+            <h2 id="gameResult"></h2>
+            <p id="finalScore"></p>
+            <div>
+                <button id="shareButton">📤 Поделиться</button>
+                <button id="restartButton">🔄 Играть снова</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Инициализация Telegram WebApp
+        let tg = window.Telegram?.WebApp;
+        if (tg) {
+            tg.ready();
+            tg.expand();
+            tg.enableClosingConfirmation();
+        }
+
+        let scene, camera, renderer, ball, playerPaddle, aiPaddle, table;
+        let ballVelocity = { x: 0, y: 0, z: 0 };
+        let gameStarted = false;
+        let playerScore = 0, aiScore = 0;
+        let touch = { x: 0, y: 0, active: false };
+        let gameActive = false;
+        let lastTouchTime = 0;
+
+        function init() {
+            // Создание сцены
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+
+            // Камера оптимизированная для мобильных
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 6, 10);
+            camera.lookAt(0, 0, 0);
+
+            // Рендерер с оптимизацией для мобильных
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: false, // Отключаем для производительности
+                powerPreference: "high-performance"
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.BasicShadowMap; // Простые тени для производительности
+            document.getElementById('gameContainer').appendChild(renderer.domElement);
+
+            // Освещение
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(0, 15, 8);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            scene.add(directionalLight);
+
+            // Стол
+            const tableGeometry = new THREE.BoxGeometry(10, 0.2, 5);
+            const tableMaterial = new THREE.MeshLambertMaterial({ color: 0x0066cc });
+            table = new THREE.Mesh(tableGeometry, tableMaterial);
+            table.position.y = -0.1;
+            table.receiveShadow = true;
+            scene.add(table);
+
+            // Сетка
+            const netGeometry = new THREE.BoxGeometry(0.1, 0.8, 5);
+            const netMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const net = new THREE.Mesh(netGeometry, netMaterial);
+            net.position.set(0, 0.4, 0);
+            scene.add(net);
+
+            // Мяч
+            const ballGeometry = new THREE.SphereGeometry(0.15, 12, 12);
+            const ballMaterial = new THREE.MeshLambertMaterial({ color: 0xff6600 });
+            ball = new THREE.Mesh(ballGeometry, ballMaterial);
+            ball.position.set(0, 2, 0);
+            ball.castShadow = true;
+            scene.add(ball);
+
+            // Ракетки с упрощенной геометрией
+            const paddleGeometry = new THREE.CylinderGeometry(0.6, 0.6, 0.08, 12);
+            const paddleMaterial = new THREE.MeshLambertMaterial({ color: 0xcc0000 });
+            playerPaddle = new THREE.Mesh(paddleGeometry, paddleMaterial);
+            playerPaddle.position.set(0, 0.8, 3);
+            playerPaddle.castShadow = true;
+            scene.add(playerPaddle);
+
+            const aiPaddleMaterial = new THREE.MeshLambertMaterial({ color: 0x00cc00 });
+            aiPaddle = new THREE.Mesh(paddleGeometry, aiPaddleMaterial);
+            aiPaddle.position.set(0, 0.8, -3);
+            aiPaddle.castShadow = true;
+            scene.add(aiPaddle);
+
+            // Touch события
+            setupTouchControls();
+            
+            // События
+            document.addEventListener('resize', onWindowResize);
+            document.getElementById('startButton').addEventListener('click', startGame);
+            document.getElementById('restartButton').addEventListener('click', restartGame);
+            document.getElementById('shareButton').addEventListener('click', shareScore);
+        }
+
+        function setupTouchControls() {
+            const gameContainer = document.getElementById('gameContainer');
+            
+            gameContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+            gameContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
+            gameContainer.addEventListener('touchend', handleTouchEnd, { passive: false });
+            
+            // Поддержка мыши для тестирования
+            gameContainer.addEventListener('mousedown', handleMouseDown);
+            gameContainer.addEventListener('mousemove', handleMouseMove);
+            gameContainer.addEventListener('mouseup', handleMouseUp);
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            if (!gameActive || e.touches.length === 0) return;
+            
+            const touch = e.touches[0];
+            updateTouchPosition(touch.clientX, touch.clientY);
+            this.touch.active = true;
+            lastTouchTime = Date.now();
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (!gameActive || e.touches.length === 0) return;
+            
+            const touch = e.touches[0];
+            updateTouchPosition(touch.clientX, touch.clientY);
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            this.touch.active = false;
+            
+            // Проверка на тап для удара
+            if (Date.now() - lastTouchTime < 200) {
+                performHit();
+            }
+        }
+
+        function handleMouseDown(e) {
+            if (!gameActive) return;
+            updateTouchPosition(e.clientX, e.clientY);
+            touch.active = true;
+            lastTouchTime = Date.now();
+        }
+
+        function handleMouseMove(e) {
+            if (!gameActive) return;
+            updateTouchPosition(e.clientX, e.clientY);
+        }
+
+        function handleMouseUp(e) {
+            touch.active = false;
+            if (Date.now() - lastTouchTime < 200) {
+                performHit();
+            }
+        }
+
+        function updateTouchPosition(clientX, clientY) {
+            touch.x = (clientX / window.innerWidth) * 2 - 1;
+            touch.y = -(clientY / window.innerHeight) * 2 + 1;
+            
+            // Обновление позиции ракетки игрока
+            playerPaddle.position.x = touch.x * 4;
+            playerPaddle.position.y = Math.max(0.4, 0.8 + touch.y * 1.5);
+        }
+
+        function performHit() {
+            const distance = ball.position.distanceTo(playerPaddle.position);
+            if (distance < 1.2) {
+                // Haptic feedback для Telegram
+                if (tg && tg.HapticFeedback) {
+                    tg.HapticFeedback.impactOccurred('medium');
+                }
+                
+                ballVelocity.x = (ball.position.x - playerPaddle.position.x) * 0.4;
+                ballVelocity.y = Math.abs(ballVelocity.y) + 0.15;
+                ballVelocity.z = -Math.abs(ballVelocity.z) - 0.08;
+            }
+        }
+
+        function startGame() {
+            gameStarted = true;
+            gameActive = true;
+            document.getElementById('instructions').classList.add('hidden');
+            document.getElementById('touchArea').classList.remove('hidden');
+            
+            resetBall();
+            animate();
+        }
+
+        function resetBall() {
+            ball.position.set(0, 1.5, 0);
+            ballVelocity.x = (Math.random() - 0.5) * 0.08;
+            ballVelocity.y = 0;
+            ballVelocity.z = 0.12;
+        }
+
+        function updateBall() {
+            if (!gameActive) return;
+            
+            ballVelocity.y -= 0.008; // Гравитация
+            
+            ball.position.x += ballVelocity.x;
+            ball.position.y += ballVelocity.y;
+            ball.position.z += ballVelocity.z;
+
+            // Отскок от стола
+            if (ball.position.y <= 0.25 && ballVelocity.y < 0) {
+                ballVelocity.y = -ballVelocity.y * 0.7;
+                ballVelocity.x *= 0.9;
+                ballVelocity.z *= 0.9;
+            }
+
+            // Отскок от боковых границ
+            if (Math.abs(ball.position.x) > 5) {
+                ballVelocity.x = -ballVelocity.x;
+            }
+
+            // Столкновение с ракеткой ИИ
+            const aiDistance = ball.position.distanceTo(aiPaddle.position);
+            if (aiDistance < 0.8 && ballVelocity.z < 0) {
+                ballVelocity.x = (ball.position.x - aiPaddle.position.x) * 0.3;
+                ballVelocity.y = Math.abs(ballVelocity.y) + 0.1;
+                ballVelocity.z = Math.abs(ballVelocity.z) + 0.06;
+            }
+
+            // Проверка очков
+            if (ball.position.z > 6) {
+                aiScore++;
+                updateScore();
+                resetBall();
+            } else if (ball.position.z < -6) {
+                playerScore++;
+                updateScore();
+                resetBall();
+            }
+
+            if (playerScore >= 5 || aiScore >= 5) {
+                endGame();
+            }
+        }
+
+        function updateAI() {
+            if (!gameActive) return;
+            
+            const targetX = ball.position.x * 0.7;
+            aiPaddle.position.x += (targetX - aiPaddle.position.x) * 0.08;
+            aiPaddle.position.x = Math.max(-4, Math.min(4, aiPaddle.position.x));
+        }
+
+        function updateScore() {
+            document.getElementById('playerScore').textContent = playerScore;
+            document.getElementById('aiScore').textContent = aiScore;
+        }
+
+        function endGame() {
+            gameActive = false;
+            document.getElementById('touchArea').classList.add('hidden');
+            
+            const won = playerScore >= 5;
+            document.getElementById('gameResult').textContent = won ? '🎉 Победа!' : '😔 Поражение';
+            document.getElementById('finalScore').textContent = `Финальный счет: ${playerScore}:${aiScore}`;
+            document.getElementById('gameOverModal').classList.remove('hidden');
+            
+            // Haptic feedback
+            if (tg && tg.HapticFeedback) {
+                tg.HapticFeedback.notificationOccurred(won ? 'success' : 'error');
+            }
+        }
+
+        function restartGame() {
+            playerScore = 0;
+            aiScore = 0;
+            updateScore();
+            document.getElementById('gameOverModal').classList.add('hidden');
+            document.getElementById('instructions').classList.remove('hidden');
+            gameStarted = false;
+        }
+
+        function shareScore() {
+            const message = `🏓 Сыграл в пинг-понг! Счет: ${playerScore}:${aiScore}`;
+            
+            if (tg && tg.sendData) {
+                tg.sendData(JSON.stringify({
+                    action: 'share_score',
+                    playerScore: playerScore,
+                    aiScore: aiScore,
+                    won: playerScore >= 5
+                }));
+            }
+            
+            // Альтернативный способ поделиться
+            if (navigator.share) {
+                navigator.share({
+                    title: '3D Пинг-понг',
+                    text: message
+                });
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        let lastTime = 0;
+        function animate(currentTime = 0) {
+            if (!gameStarted) return;
+            
+            const deltaTime = currentTime - lastTime;
+            if (deltaTime >= 16) { // ~60 FPS ограничение для производительности
+                updateBall();
+                updateAI();
+                renderer.render(scene, camera);
+                lastTime = currentTime;
+            }
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Инициализация
+        init();
+
+        // Обработка закрытия приложения
+        if (tg) {
+            tg.onEvent('mainButtonClicked', () => {
+                if (gameActive) {
+                    shareScore();
+                }
+            });
+            
+            tg.onEvent('backButtonClicked', () => {
+                if (gameActive) {
+                    restartGame();
+                    return false;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
